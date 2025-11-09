@@ -31,10 +31,10 @@
 
 This enhanced version adds critical conversational AI features missing from the original:
 
-### 🤖 AI-Friendly Improvements (v0.9.5)
+### 🤖 AI-Friendly Improvements (v1.0.0)
+- **✅ Official v3 API**: Now uses official ElevenLabs endpoints - no proxy needed!
 - **🎯 Smart Voice Defaults**: `search_voices()` now returns common working voices instantly
 - **📚 Educational Error Messages**: Errors guide AI agents to success with examples
-- **🔧 Fixed v3 Proxy**: `text_to_dialogue` now properly uses v3 proxy (no more 403 errors!)
 - **💡 Clear Tool Guidance**: No more confusion about single vs multi-speaker tools
 - **🎤 Accurate v3 Voice IDs**: All 20 v3-optimized voices now have correct IDs and descriptions
 - **🏯 Auto-Split Long Dialogues**: Automatically splits dialogues over 3000 chars into multiple files
@@ -42,12 +42,13 @@ This enhanced version adds critical conversational AI features missing from the 
 - **🏷️ Smart Tag Simplification**: Complex tags auto-convert to valid v3 tags for better quality
 - **⏱️ Dynamic Timeouts**: Prevents timeouts on complex dialogues by calculating appropriate wait times
 
-### 🆕 ElevenLabs v3 Model Support (Alpha)
-- **🎭 Enhanced Expressiveness**: Use the new v3 model with `model="v3"` parameter
+### 🆕 ElevenLabs v3 Model Support (Official)
+- **🎭 Enhanced Expressiveness**: Use the official v3 model with `model="v3"` parameter
 - **🎤 Audio Tags**: Add emotions and sound effects like `[thoughtful]`, `[crying]`, `[laughing]`, `[piano]`
 - **👥 Multi-Speaker Dialogue**: Generate natural conversations between multiple speakers
 - **✨ Dialogue Enhancement**: Automatically enhance your dialogue with proper formatting and tags
-- **🔐 v3 Proxy Support**: Use v3 even without API access by enabling the built-in proxy (see v3 Proxy section)
+- **🌍 70+ Languages**: v3 supports multilingual synthesis with emotional control
+- **✅ Official API**: Now uses the official ElevenLabs text-to-dialogue endpoint
 
 ### 🎙️ Conversational AI Features
 - **Conversation History**: Retrieve full conversation details including transcripts
@@ -224,44 +225,19 @@ With the enhanced conversation tools, you can now:
 
 You can add the `ELEVENLABS_MCP_BASE_PATH` environment variable to the `claude_desktop_config.json` to specify the base path MCP server should look for and output files specified with relative paths.
 
-### 🔐 v3 Proxy (For users without v3 API access)
+### ✅ v3 Model - Now Officially Available!
 
-The v3 model is currently in alpha and requires special access. If you have access through the ElevenLabs website but not through the API, you can use the built-in proxy:
+The v3 model is now officially available through the ElevenLabs API! No proxy or special access needed - just use your regular API key.
 
-1. **Enable the proxy** by adding these environment variables to your MCP config:
+**What's New:**
+- Official `eleven_v3` model ID
+- Text-to-dialogue endpoint at `/v1/text-to-dialogue`
+- 70+ language support
+- 3,000 character limit per request
+- Enhanced emotional expressiveness
 
-```json
-{
-  "mcpServers": {
-    "ElevenLabs": {
-      "command": "npx",
-      "args": ["elevenlabs-mcp-enhanced@latest"],
-      "env": {
-        "ELEVENLABS_API_KEY": "your_api_key",
-        "ELEVENLABS_EMAIL": "your_email@example.com",
-        "ELEVENLABS_PASSWORD": "your_password",
-        "ELEVENLABS_V3_PROXY": "true"
-      }
-    }
-  }
-}
-```
-
-2. **How it works**:
-   - The proxy automatically starts when you use `model="v3"`
-   - It authenticates with your ElevenLabs account using Firebase
-   - Maintains session tokens and refreshes them automatically
-   - Forwards v3 requests with proper authentication
-
-3. **Security notes**:
-   - Credentials are only used locally for authentication
-   - The proxy runs on localhost (port 8123 by default)
-   - Tokens are refreshed automatically before expiry
-
-4. **Limitations**:
-   - Requires valid ElevenLabs account with v3 web access
-   - Proxy must authenticate through Firebase (same as web login)
-   - Not needed once ElevenLabs releases public v3 API access
+**Usage:**
+Simply set `model="v3"` in `text_to_speech()` or use `text_to_dialogue()` for multi-speaker content. The server now uses the official API endpoints.
 
 ## Contributing
 

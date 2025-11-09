@@ -42,9 +42,7 @@ api_key = os.getenv("ELEVENLABS_API_KEY")
 base_path = os.getenv("ELEVENLABS_MCP_BASE_PATH")
 DEFAULT_VOICE_ID = "cgSgspJ2msm6clMCkdW9"
 
-# v3 proxy configuration
-v3_proxy_enabled = os.getenv("ELEVENLABS_V3_PROXY", "false").lower() == "true"
-v3_proxy_url = f"http://localhost:{os.getenv('V3_PROXY_PORT', '8123')}"
+# v3 is now officially supported - no proxy needed!
 
 # Valid v3 tags based on ElevenLabs documentation
 VALID_V3_TAGS = {
@@ -152,7 +150,7 @@ mcp = FastMCP("ElevenLabs")
 
 
 @mcp.tool(
-    description="Converts text to speech (v2/flash models). Returns: audio file path. Use when: single speaker narration with v2 or flash models. For v3 with tags, use text_to_speech_v3."
+    description="Converts text to speech (v2/v3/flash models). Returns: audio file path. Use when: single speaker narration. Supports v3 with audio tags."
 )
 def text_to_speech(
     text: str,
@@ -169,34 +167,27 @@ def text_to_speech(
     output_format: str = "mp3_44100_128",
 ):
     """
-    Converts text to speech using v2 or flash models.
+    Converts text to speech using v2, v3, or flash models.
 
     Args:
-        text: The text to convert to speech
+        text: The text to convert to speech (supports v3 audio tags like [happy], [whisper])
         voice_name: Name of the voice (optional, defaults to agent voice)
         voice_id: Direct voice ID (overrides voice_name)
-        stability: Voice stability 0-1 (0.5 default)
+        stability: Voice stability 0-1 (0.5 default) - v3 requires 0.0, 0.5, or 1.0
         similarity_boost: Voice similarity 0-1 (0.75 default)
-        style: Style exaggeration 0-1 (0 default)
-        use_speaker_boost: Enhanced similarity (true default)
-        speed: Speech speed 0.7-1.2 (1.0 default)
-        model: 'v2' (default) or 'flash' (fast) - v3 not supported here
+        style: Style exaggeration 0-1 (0 default) - not available for v3
+        use_speaker_boost: Enhanced similarity (true default) - not available for v3
+        speed: Speech speed 0.7-1.2 (1.0 default) - not available for v3
+        model: 'v2' (default), 'v3' (most expressive), or 'flash' (fastest)
         output_format: Audio format (mp3_44100_128 default)
         output_directory: Save location (Desktop default)
         language: ISO 639-1 code (en default)
 
-    Note: Incurs API costs. For v3 with tags use text_to_speech_v3.
+    Note: Incurs API costs. v3 supports 70+ languages and audio tags.
     For multiple speakers use text_to_dialogue.
     """
     if text == "":
         make_error("Text is required.")
-    
-    if model == "v3":
-        make_error(
-            "v3 model not supported in text_to_speech",
-            code="WRONG_TOOL",
-            suggestion="Use text_to_speech_v3() for v3 model with audio tags support"
-        )
 
     if voice_id is not None and voice_name is not None:
         make_error("voice_id and voice_name cannot both be provided.")
@@ -249,9 +240,9 @@ Common voice IDs:
     output_path = make_output_path(output_directory, base_path)
     output_file_name = make_output_file("tts", text, output_path, "mp3")
 
-    # v3 model requires the dialogue endpoint, even for single speaker
+    # v3 model uses the official text-to-dialogue endpoint for single speaker
     if model == "v3":
-        # Auto-adjust stability to valid v3 values
+        # Auto-adjust stability to valid v3 values (v3 only accepts 0.0, 0.5, or 1.0)
         original_stability = stability
         if stability not in [0.0, 0.5, 1.0]:
             # Round to nearest valid value
@@ -262,81 +253,42 @@ Common voice IDs:
             else:
                 stability = 1.0
             print(f"Auto-adjusted stability from {original_stability} to {stability}")
-        
+
         # Simplify tags for v3
         text = simplify_tags(text)
-        
+
         # Validate and warn about remaining invalid tags
         invalid_tags = validate_and_warn_tags(text)
         if invalid_tags:
             print(f"Warning: These tags may not work properly: {invalid_tags}")
             print("Consider using: whispers, crying, shouting, pause, etc.")
-        
-        # Sanitize text to avoid JSON parsing issues
-        # Replace problematic characters that cause escaping issues
-        sanitized_text = text.replace('...', '.').replace('\n', ' ')
-        
-        # Check if v3 proxy is enabled for users with web access
-        if v3_proxy_enabled:
-            # Ensure proxy is running
-            import subprocess
-            import psutil
-            import sys
-            
-            # Check if proxy is already running
-            proxy_running = False
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    cmdline = proc.info.get('cmdline')
-                    if cmdline and 'v3_proxy.py' in ' '.join(cmdline):
-                        proxy_running = True
-                        break
-                except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
-                    continue
-            
-            if not proxy_running:
-                # Start proxy in background
-                proxy_path = os.path.join(os.path.dirname(__file__), 'v3_proxy.py')
-                subprocess.Popen([sys.executable, proxy_path], 
-                               stdout=subprocess.DEVNULL, 
-                               stderr=subprocess.DEVNULL)
-                # Give it a moment to start
-                import time
-                time.sleep(2)
-            
-            # Use proxy endpoint
-            endpoint = f"{v3_proxy_url}/v1/text-to-dialogue/stream"
-        else:
-            # Use direct API endpoint (requires v3 access)
-            endpoint = "https://api.elevenlabs.io/v1/text-to-dialogue/stream"
-        
+
+        # Use official text-to-dialogue endpoint for v3
+        endpoint = "https://api.elevenlabs.io/v1/text-to-dialogue"
+
         response = httpx.post(
             endpoint,
+            params={"output_format": output_format},
             json={
                 "inputs": [{
-                    "text": sanitized_text,
+                    "text": text,
                     "voice_id": voice_id
                 }],
                 "model_id": "eleven_v3",
                 "settings": {
-                    "quality": None,
                     "similarity_boost": similarity_boost,
                     "stability": stability
                 }
             },
             headers={
                 "xi-api-key": api_key,
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg"
-            } if not v3_proxy_enabled else {
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg"
+                "Content-Type": "application/json"
             },
-            timeout=calculate_dialogue_timeout([{"text": sanitized_text}])
+            timeout=calculate_dialogue_timeout([{"text": text}])
         )
-        
+
         if response.status_code == 403:
-            make_error("v3 access denied. You need special access from ElevenLabs sales, or enable v3 proxy with ELEVENLABS_V3_PROXY=true")
+            make_error("v3 access denied. The v3 model is now officially available - check your API key has access.")
         elif response.status_code == 422:
             # Parse error details for better messaging
             try:
@@ -349,7 +301,7 @@ Common voice IDs:
                 make_error(f"v3 API error: {response.status_code} - {response.text}")
         elif response.status_code != 200:
             make_error(f"v3 API error: {response.status_code} - {response.text}")
-        
+
         audio_bytes = response.content
     else:
         # v2 and flash models use regular text-to-speech endpoint
@@ -1613,67 +1565,32 @@ inputs = [
         
         # Process each chunk
         output_files = []
-        
+
         for chunk_idx, chunk in enumerate(chunks):
-            # Check if v3 proxy is enabled
-            if v3_proxy_enabled:
-                # Ensure proxy is running
-                import subprocess
-                import psutil
-                import sys
-                
-                # Check if proxy is already running
-                proxy_running = False
-                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                    try:
-                        cmdline = proc.info.get('cmdline')
-                        if cmdline and 'v3_proxy.py' in ' '.join(cmdline):
-                            proxy_running = True
-                            break
-                    except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
-                        continue
-                
-                if not proxy_running:
-                    # Start proxy in background
-                    proxy_path = os.path.join(os.path.dirname(__file__), 'v3_proxy.py')
-                    subprocess.Popen([sys.executable, proxy_path], 
-                                   stdout=subprocess.DEVNULL, 
-                                   stderr=subprocess.DEVNULL)
-                    # Give it a moment to start
-                    import time
-                    time.sleep(2)
-                
-                # Use proxy endpoint
-                endpoint = f"{v3_proxy_url}/v1/text-to-dialogue/stream"
-            else:
-                # Use direct API endpoint (requires v3 access)
-                endpoint = "https://api.elevenlabs.io/v1/text-to-dialogue/stream"
-            
+            # Use official text-to-dialogue endpoint
+            endpoint = "https://api.elevenlabs.io/v1/text-to-dialogue"
+
             # Make API call to text-to-dialogue endpoint
             response = httpx.post(
-            endpoint,
-            json={
-                "inputs": chunk,
-                "model_id": "eleven_v3",
-                "settings": {
-                    "quality": None,
-                    "similarity_boost": similarity_boost,
-                    "stability": stability
-                }
-            },
-            headers={
-                "xi-api-key": api_key,
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg"
-            } if not v3_proxy_enabled else {
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg"
-            },
-            timeout=calculate_dialogue_timeout(chunk)
+                endpoint,
+                params={"output_format": "mp3_44100_128"},
+                json={
+                    "inputs": chunk,
+                    "model_id": "eleven_v3",
+                    "settings": {
+                        "similarity_boost": similarity_boost,
+                        "stability": stability
+                    }
+                },
+                headers={
+                    "xi-api-key": api_key,
+                    "Content-Type": "application/json"
+                },
+                timeout=calculate_dialogue_timeout(chunk)
             )
-            
+
             if response.status_code == 403:
-                make_error("v3 access denied. You need special access from ElevenLabs sales")
+                make_error("v3 access denied. The v3 model is now officially available - check your API key has access.")
             elif response.status_code == 422:
                 try:
                     error_detail = response.json()
